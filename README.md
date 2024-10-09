@@ -1,3 +1,5 @@
+> Project is currently in development.
+
 This project is a Binary Coded Decimal (BCD) clock with an alarm function, built using miniature incandescent lamps to visually represent time. The clock is based on an Arduino Pro Mini microcontroller and a DS3231 real-time clock (RTC) module for precise timekeeping. The project combines basic timekeeping functionality with a BCD display system, using common components like shift registers and transistors to drive the bulbs.
 
 ## Key Features
