@@ -6,8 +6,8 @@
 
 RTC_DS3231 rtc;
 
-unsigned long previousMillis = 0;   // Переменная для хранения последнего времени
-const long interval = 1000;         // Интервал в 1 секунду (1000 миллисекунд)
+unsigned long previousMillis = 0;
+const long interval = 1000;
 int secondsCounter = 0; 
 
 void setup() {
@@ -33,38 +33,31 @@ byte convertToBCD(int seconds) {
   return bcd;
 }
 
+void display(int d1, int d2, int d3) {
+  // for hours, shift one bit to the left since Q7 is unused
+  byte hours = convertToBCD(d1) << 1;
+  byte minutes = convertToBCD(d2);
+  byte seconds = convertToBCD(d3);
+
+  digitalWrite(stcp_pin, LOW);
+  shiftOut(ds_pin, shcp_pin, LSBFIRST, hours);
+  shiftOut(ds_pin, shcp_pin, LSBFIRST, minutes);
+  shiftOut(ds_pin, shcp_pin, LSBFIRST, seconds);
+  digitalWrite(stcp_pin, HIGH);
+}
+
+void displayCurrentTime() {
+  DateTime now = rtc.now();
+  display(now.hour(), now.minute(), now.second());
+}
+
 void loop() {
-  unsigned long currentMillis = millis();   // Получение текущего времени
+  unsigned long currentMillis = millis();
 
   // Если прошло 1000 миллисекунд
   if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;  // Обновляем предыдущее время
+    previousMillis = currentMillis;
 
-    // Увеличиваем счетчик секунд
-    secondsCounter++;
-    DateTime now = rtc.now();
-    
-    byte hours = convertToBCD(now.hour());
-    byte minutes = convertToBCD(now.minute());
-    byte seconds = convertToBCD(now.second());
-
-    Serial.print(hours, BIN);
-    Serial.print(" ");
-    Serial.print(minutes, BIN);
-    Serial.print(" ");
-    Serial.print(seconds, BIN);
-    Serial.println();
-
-    // Если прошло 60 секунд, сбрасываем счетчик
-    if (secondsCounter >= 60) {
-      secondsCounter = 0;
-    }
-
-    //byte bcd = convertToBCD(secondsCounter);
-    //Serial.println(bcd, BIN);  // Выводим BCD в двоичном формате
-
-    //digitalWrite(stcp_pin, LOW);
-    //shiftOut(ds_pin, shcp_pin, LSBFIRST, bcd);
-    //digitalWrite(stcp_pin, HIGH);
+    displayCurrentTime();
   }
 }
