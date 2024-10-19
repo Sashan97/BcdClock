@@ -8,7 +8,7 @@
 // Mode indication
 #define alarmLamp 7
 #define setLamp 8
-#define dateLamp 9
+#define sleepLamp 9
 
 // Keyboard
 #define snoozeButton 10
@@ -42,7 +42,14 @@ unsigned long lastDebounceTimeMinutes = 0; // Timing for debounce
 // Debounce time
 const unsigned long debounceDelay = 50;
 
-enum : byte { REGULAR, SET_TIME, SET_DATE, SET_SLEEP_DELAY, SET_ALARM_TIME } setMode = REGULAR;
+// Sleep delay in milliseconds. If inactive for this amount of seconds, display will shut down
+long sleepDelay = 30000;
+long sleepDelayOptions[] = { 10000, 30000, 60000, 90000, 120000, 300000, 600000};
+int sleepDelayOptionIndex = 1;
+
+long activityMillis = 0;
+
+enum : byte { REGULAR, SET_TIME, SET_SLEEP_DELAY, SET_ALARM_TIME } setMode = REGULAR;
 
 void setup() {
   pinMode(ds_pin, OUTPUT);
@@ -52,7 +59,7 @@ void setup() {
   // Initialize mode indicator pins as output
   pinMode(alarmLamp, OUTPUT);
   pinMode(setLamp, OUTPUT);
-  pinMode(dateLamp, OUTPUT);
+  pinMode(sleepLamp, OUTPUT);
 
   // Initialize button pins as input
   pinMode(snoozeButton, INPUT); // Pin for Snooze Button
@@ -97,25 +104,47 @@ void handleSnoozeButtonPress() {
     Serial.println("Snooze button pressed.");
 }
 
+void changeSleepDelay()
+{
+  sleepDelayOptionIndex++;
+
+  if (sleepDelayOptionIndex > 6)
+    sleepDelayOptionIndex = 0;
+
+  sleepDelay = sleepDelayOptions[sleepDelayOptionIndex];
+  displayDelay();
+}
+
+void displayDelay() {
+  int delayInSeconds = sleepDelay / 1000;
+  int minutes = delayInSeconds / 60;
+  int seconds;
+
+  if (minutes > 0)
+    seconds = delayInSeconds - (minutes * 60);
+  else
+    seconds = delayInSeconds;
+
+  display(0, minutes, seconds);
+}
+
 void handleSetButtonPress() {
-    setMode = (setMode + 1) % 5;
+    setMode = (setMode + 1) % 4;
 
     if (setMode != REGULAR)
       digitalWrite(setLamp, HIGH);
     else
       digitalWrite(setLamp, LOW);
+
+    if (setMode == SET_SLEEP_DELAY)
+      digitalWrite(sleepLamp, HIGH);
+    else
+      digitalWrite(sleepLamp, LOW);
+
 }
 
 void handleHoursButtonPress() {
-  // if not in set mode, display date
-  if (setMode == REGULAR) {
-    DateTime now = rtc.now();
-    digitalWrite(dateLamp, HIGH);
-    display(now.month(), 0, now.day());
-    delay(5000);
-    digitalWrite(dateLamp, LOW);
-  }
-  else if (setMode == SET_TIME)
+  if (setMode == SET_TIME)
   {
     DateTime current = rtc.now();
 
@@ -135,6 +164,8 @@ void handleHoursButtonPress() {
     rtc.adjust(newDateTime);
     display(newDateTime.hour(), newDateTime.minute(), 0);
   }
+  else if (setMode == SET_SLEEP_DELAY)
+    changeSleepDelay();
 }
 
 void handleMinutesButtonPress() {
@@ -158,6 +189,9 @@ void handleMinutesButtonPress() {
     rtc.adjust(newDateTime);
     display(newDateTime.hour(), newDateTime.minute(), 0);
   }
+  else if (setMode == SET_SLEEP_DELAY)
+    changeSleepDelay();
+
 }
 
 void handleButton(int buttonPin, int &buttonState, int &lastButtonState, unsigned long &lastDebounceTime, void (*buttonAction)()) {
@@ -174,7 +208,8 @@ void handleButton(int buttonPin, int &buttonState, int &lastButtonState, unsigne
             buttonState = reading; // Update button state
             // Only take action if the button is pressed (HIGH)
             if (buttonState == HIGH) {
-                buttonAction(); // Call the specific action function
+              activityMillis = millis();
+              buttonAction(); // Call the specific action function
             }
         }
     }
@@ -191,10 +226,14 @@ void loop() {
   handleButton(minutesButton, minutesButtonState, lastMinutesButtonState, lastDebounceTimeMinutes, handleMinutesButtonPress);
 
   if (setMode == REGULAR) {
-    // Refresh time once per second
-    if (currentMillis - previousMillis >= interval) {
-      previousMillis = currentMillis;
-      displayCurrentTime();
+    if (currentMillis - activityMillis >= sleepDelay)
+      display(0, 0, 0);
+    else {
+      // Refresh time once per second
+      if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        displayCurrentTime();
+      }
     }
   }
   else if (setMode == SET_TIME) {
@@ -204,5 +243,8 @@ void loop() {
       DateTime now = rtc.now();
       display(now.hour(), now.minute(), 0);
     } 
+  }
+  else if (setMode == SET_SLEEP_DELAY) {
+    displayDelay();
   }
 }
