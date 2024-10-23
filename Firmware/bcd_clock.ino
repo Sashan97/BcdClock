@@ -130,6 +130,10 @@ void displayDelay() {
 
 void handleSetButtonPress() {
     setMode = (setMode + 1) % 4;
+	
+	// this will trigger the display refresh on the next loop iteration
+    if (previousMillis > 1000)
+      previousMillis-=1000;
 
     if (setMode != REGULAR)
       digitalWrite(setLamp, HIGH);
