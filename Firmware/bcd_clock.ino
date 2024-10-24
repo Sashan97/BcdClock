@@ -44,7 +44,7 @@ unsigned long lastDebounceTimeHours = 0;  // Timing for debounce
 unsigned long lastDebounceTimeMinutes = 0; // Timing for debounce
 
 // Debounce time
-const unsigned long debounceDelay = 50;
+const unsigned long debounceDelay = 20;
 
 // Sleep delay in milliseconds. If inactive for this amount of seconds, display will shut down
 long sleepDelay = 30000;
@@ -52,6 +52,9 @@ long sleepDelayOptions[] = { 10000, 30000, 60000, 90000, 120000, 300000, 600000}
 int sleepDelayOptionIndex = 1;
 
 long activityMillis = 0;
+
+// flag indicating if display should update ot the next loop iteration
+bool refreshNeeded;
 
 bool alarmArmed = false;
 bool alarmFired = false;
@@ -114,9 +117,7 @@ void displayCurrentTime() {
 }
 
 void handleSnoozeButtonPress() {
-  // this will trigger the display refresh on the next loop iteration
-  if (previousMillis > 1000)
-    previousMillis-=1000;
+  refreshNeeded = true;
 
   //TODO: set alarm to current + snooze time
   if (alarmFired) {
@@ -154,9 +155,7 @@ void displayDelay() {
 void handleSetButtonPress() {
     setMode = (setMode + 1) % 4;
 
-    // this will trigger the display refresh on the next loop iteration
-    if (previousMillis > 1000)
-      previousMillis-=1000;
+    refreshNeeded = true;
 
     if (setMode != REGULAR)
       digitalWrite(setLamp, HIGH);
@@ -261,13 +260,14 @@ void handleButton(int buttonPin, int &buttonState, int &lastButtonState, unsigne
 void loop() {
   unsigned long currentMillis = millis();
 
+  refreshNeeded = false;
+
   handleButton(snoozeButton, snoozeButtonState, lastSnoozeButtonState, lastDebounceTimeSnooze, handleSnoozeButtonPress);
   handleButton(setButton, setButtonState, lastSetButtonState, lastDebounceTimeSet, handleSetButtonPress);
   handleButton(hoursButton, hoursButtonState, lastHoursButtonState, lastDebounceTimeHours, handleHoursButtonPress);
   handleButton(minutesButton, minutesButtonState, lastMinutesButtonState, lastDebounceTimeMinutes, handleMinutesButtonPress);
 
   DateTime current;
-  bool refreshNeeded = false;
 
   // Refresh time once per second
   if (currentMillis - previousMillis >= interval)
@@ -276,7 +276,6 @@ void loop() {
     current = rtc.now();
     refreshNeeded = true;
   }
-
 
   if (alarmFired) {
     // TODO: start beeping
