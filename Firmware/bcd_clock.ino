@@ -1,11 +1,12 @@
 #include <RTClib.h>
 
 // Settings
-#define SNOOZE_TIME_SECONDS 300
+#define SNOOZE_TIME_MINUTES 1
 #define ALARM_BUZZER_FREQUENCY_HZ 750
-#define DEFAULT_ALARM_HOURS 8
-#define DEFAULT_ALARM_MINUTES 0
+#define DEFAULT_ALARM_HOURS 22
+#define DEFAULT_ALARM_MINUTES 24
 #define DEFAULT_SLEEP_DELAY_MS 30000
+#define DOUBLE_CLICK_THRESHOLD_MS 1000
 
 #define buzzer_pin 3
 
@@ -56,10 +57,15 @@ long sleepDelay = DEFAULT_SLEEP_DELAY_MS;
 long sleepDelayOptions[] = { 10000, 30000, 60000, 90000, 120000, 300000, 600000};
 int sleepDelayOptionIndex = 1;
 
-long activityMillis = 0;
+unsigned long activityMillis = 0;
+unsigned long snoozeDoubleClickTime = 0;
 
 // flag indicating if display should update ot the next loop iteration
 bool refreshNeeded;
+
+int hour;
+int minute;
+int second;
 
 bool alarmArmed = false;
 bool alarmFired = false;
@@ -125,11 +131,26 @@ void displayCurrentTime() {
 void handleSnoozeButtonPress() {
   refreshNeeded = true;
 
+  unsigned long clickTime = millis();
+  if (clickTime - snoozeDoubleClickTime < DOUBLE_CLICK_THRESHOLD_MS) {
+    alarmArmed = !alarmArmed;
+    if (!alarmArmed)
+      digitalWrite(alarmLamp, LOW);
+  }
+  snoozeDoubleClickTime = clickTime;
+
   //TODO: set alarm to current + snooze time
   if (alarmFired) {
-    alarmArmed = false;
     alarmFired = false;
     noTone(buzzer_pin);
+
+    alarmMinute += SNOOZE_TIME_MINUTES;
+    while (alarmMinute >= 60) {
+      alarmMinute -=60;
+      alarmHour++;
+      if (alarmHour == 24)
+        alarmHour = 0;
+    }
   }
   
   if (setMode == SET_ALARM_TIME)
@@ -265,7 +286,6 @@ void handleButton(int buttonPin, int &buttonState, int &lastButtonState, unsigne
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
 
   refreshNeeded = false;
 
@@ -274,20 +294,25 @@ void loop() {
   handleButton(hoursButton, hoursButtonState, lastHoursButtonState, lastDebounceTimeHours, handleHoursButtonPress);
   handleButton(minutesButton, minutesButtonState, lastMinutesButtonState, lastDebounceTimeMinutes, handleMinutesButtonPress);
 
-  DateTime current;
-
+  unsigned long currentMillis = millis();
   // Refresh time once per second
   if (currentMillis - previousMillis >= interval)
   {
     previousMillis = currentMillis;
+
+    DateTime current = rtc.now();
+    hour = current.hour();
+    minute = current.minute();
+    second = current.second();
+
     refreshNeeded = true;
+
+    if (alarmArmed && hour == alarmHour && minute == alarmMinute)
+      alarmFired = true;
   }
 
-  if (refreshNeeded)
-    current = rtc.now();
-
   if (alarmFired && refreshNeeded) {
-    activityMillis = millis();
+    activityMillis = currentMillis;
     if (!toneActive) {
       tone(buzzer_pin, ALARM_BUZZER_FREQUENCY_HZ);
       toneActive = true;
@@ -299,29 +324,22 @@ void loop() {
   }
 
   if (setMode == REGULAR) {
-    if (alarmArmed)
-      digitalWrite(alarmLamp, HIGH);
-
-    if (currentMillis - activityMillis >= sleepDelay) {
+    if (millis() - activityMillis >= sleepDelay) {
       display(0, 0, 0);
+      digitalWrite(alarmLamp, LOW);
     }
     else {
+      if (alarmArmed) {
+        digitalWrite(alarmLamp, HIGH);
+      }
       if (refreshNeeded) {
-        Serial.print(current.hour());
-        Serial.print(":");
-        Serial.print(current.minute());
-        Serial.print(" ");
-
-        display(current.hour(), current.minute(), current.second());
-
-        if (alarmArmed && current.hour() == alarmHour && current.minute() == alarmMinute)
-          alarmFired = true;
+        display(hour, minute, second);
       }
     }
   }
   else if (setMode == SET_TIME) {
     if (refreshNeeded) {
-      display(current.hour(), current.minute(), 0);
+      display(hour, minute, 0);
     }
   }
   else if (setMode == SET_SLEEP_DELAY) {
