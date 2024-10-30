@@ -1,8 +1,13 @@
 #include <RTClib.h>
 
+// Settings
+#define SNOOZE_TIME_SECONDS 300
+#define ALARM_BUZZER_FREQUENCY_HZ 750
 #define DEFAULT_ALARM_HOURS 8
 #define DEFAULT_ALARM_MINUTES 0
-#define SNOOZE_TIME_SECONDS
+#define DEFAULT_SLEEP_DELAY_MS 30000
+
+#define buzzer_pin 3
 
 // Shift register
 #define ds_pin 4
@@ -47,7 +52,7 @@ unsigned long lastDebounceTimeMinutes = 0; // Timing for debounce
 const unsigned long debounceDelay = 20;
 
 // Sleep delay in milliseconds. If inactive for this amount of seconds, display will shut down
-long sleepDelay = 30000;
+long sleepDelay = DEFAULT_SLEEP_DELAY_MS;
 long sleepDelayOptions[] = { 10000, 30000, 60000, 90000, 120000, 300000, 600000};
 int sleepDelayOptionIndex = 1;
 
@@ -58,12 +63,14 @@ bool refreshNeeded;
 
 bool alarmArmed = false;
 bool alarmFired = false;
+bool toneActive = false;
 int alarmHour = DEFAULT_ALARM_HOURS;
 int alarmMinute = DEFAULT_ALARM_MINUTES;
 
 enum : byte { REGULAR, SET_TIME, SET_SLEEP_DELAY, SET_ALARM_TIME } setMode = REGULAR;
 
 void setup() {
+  pinMode(buzzer_pin, OUTPUT);
   pinMode(ds_pin, OUTPUT);
   pinMode(stcp_pin, OUTPUT);
   pinMode(shcp_pin, OUTPUT);
@@ -74,21 +81,20 @@ void setup() {
   pinMode(sleepLamp, OUTPUT);
 
   // Initialize button pins as input
-  pinMode(snoozeButton, INPUT); // Pin for Snooze Button
-  pinMode(setButton, INPUT);     // Pin for Set Button
-  pinMode(hoursButton, INPUT);   // Pin for Hours Button
-  pinMode(minutesButton, INPUT); // Pin for Minutes Button
+  pinMode(snoozeButton, INPUT);
+  pinMode(setButton, INPUT);
+  pinMode(hoursButton, INPUT);
+  pinMode(minutesButton, INPUT);
 
   Serial.begin(9600);
   rtc.begin();
-  rtc.adjust(DateTime(2024,10,15,22,23,30)); // Настройка времени
+  rtc.adjust(DateTime(2024,10,15,22,23,30));
 }
 
 byte convertToBCD(int seconds) {
-  int tens = seconds / 10;  // Получаем старшую цифру (десятки)
-  int ones = seconds % 10;  // Получаем младшую цифру (единицы)
+  int tens = seconds / 10;
+  int ones = seconds % 10;
 
-  // Формируем BCD: старшая цифра (десятки) смещается на 4 бита влево
   byte bcd = (tens << 4) | ones;
 
   return bcd;
@@ -123,6 +129,7 @@ void handleSnoozeButtonPress() {
   if (alarmFired) {
     alarmArmed = false;
     alarmFired = false;
+    noTone(buzzer_pin);
   }
   
   if (setMode == SET_ALARM_TIME)
@@ -273,13 +280,22 @@ void loop() {
   if (currentMillis - previousMillis >= interval)
   {
     previousMillis = currentMillis;
-    current = rtc.now();
     refreshNeeded = true;
   }
 
-  if (alarmFired) {
-    // TODO: start beeping
-    Serial.println("Alarm!");
+  if (refreshNeeded)
+    current = rtc.now();
+
+  if (alarmFired && refreshNeeded) {
+    activityMillis = millis();
+    if (!toneActive) {
+      tone(buzzer_pin, ALARM_BUZZER_FREQUENCY_HZ);
+      toneActive = true;
+    }
+    else {
+      noTone(buzzer_pin);
+      toneActive = false;
+    }
   }
 
   if (setMode == REGULAR) {
@@ -291,6 +307,11 @@ void loop() {
     }
     else {
       if (refreshNeeded) {
+        Serial.print(current.hour());
+        Serial.print(":");
+        Serial.print(current.minute());
+        Serial.print(" ");
+
         display(current.hour(), current.minute(), current.second());
 
         if (alarmArmed && current.hour() == alarmHour && current.minute() == alarmMinute)
@@ -299,8 +320,9 @@ void loop() {
     }
   }
   else if (setMode == SET_TIME) {
-    if (refreshNeeded)
+    if (refreshNeeded) {
       display(current.hour(), current.minute(), 0);
+    }
   }
   else if (setMode == SET_SLEEP_DELAY) {
     displayDelay();
