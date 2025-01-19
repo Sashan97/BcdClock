@@ -227,8 +227,8 @@ void handleHoursButtonPress() {
     changeSleepDelay();
   else if (setMode == SET_ALARM_TIME) {
     alarmHour++;
-    if (alarmMinute >= 60)
-      alarmMinute = 0;
+    if (alarmHour >= 24)
+      alarmHour = 0;
   }
 }
 
